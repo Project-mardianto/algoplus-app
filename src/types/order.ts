@@ -1,10 +1,10 @@
 export interface Product {
   id: string;
   name: string;
-  type: string;
   price: number;
   image: string;
   description: string;
+  type: string;
 }
 
 export interface CartItem {
@@ -12,28 +12,35 @@ export interface CartItem {
   quantity: number;
 }
 
-export interface Order {
-  id: string;
-  items: CartItem[];
-  subtotal: number;
-  deliveryFee: number;
-  total: number;
-  paymentMethod: PaymentMethod;
-  status: OrderStatus;
-  createdAt: Date;
-  driver?: Driver;
-}
-
-export type PaymentMethod = 'cash' | 'e-wallet' | 'bank-transfer';
-
-export type OrderStatus = 
-  | 'pending'
+export type OrderStatus =
   | 'confirmed'
-  | 'driver-assigned'
-  | 'en-route'
-  | 'nearby'
+  | 'preparing'
+  | 'ready_for_pickup'
+  | 'out_for_delivery'
   | 'arrived'
   | 'completed';
+
+export interface Order {
+  id: number;
+  created_at: string; 
+  total_amount: number;
+  status: OrderStatus;
+  user_id: string;
+  driver_id?: string;
+  shipping_address: string;
+
+  order_items: CartItem[];
+  profiles?: { 
+    full_name: string;
+    address: string;
+    phone: string;
+  } | null;
+  driver?: {
+    id: string;
+    full_name: string;
+    avatar_url: string;
+  } | null;
+}
 
 export interface Driver {
   id: string;
@@ -42,36 +49,4 @@ export interface Driver {
   rating: number;
   phone: string;
   vehicleNumber: string;
-  location: {
-    lat: number;
-    lng: number;
-  };
-}
-
-export interface Location {
-  lat: number;
-  lng: number;
-}
-
-export interface Subscription {
-  id: string;
-  companyName: string;
-  type: 'daily' | 'weekly';
-  quantity: number;
-  startDate: Date;
-  status: 'active' | 'paused' | 'cancelled';
-  nextDelivery: Date;
-  autoScheduling: boolean;
-}
-
-export interface DriverOrder extends Order {
-  pickupLocation: string;
-  deliveryLocation: string;
-  proofPhoto?: string;
-  driverNotes?: string;
-}
-
-export interface SupplierOrder extends Order {
-  assignedDriverId?: string;
-  preparationStatus: 'pending' | 'preparing' | 'ready' | 'picked-up';
 }

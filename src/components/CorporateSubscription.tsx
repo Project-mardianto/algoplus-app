@@ -1,165 +1,128 @@
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Switch } from '@/components/ui/switch';
-import { Building2, Calendar, Package, CheckCircle2 } from 'lucide-react';
-import { Subscription } from '@/types/order';
+
+import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import BottomNav from "./BottomNav";
+import { useEffect, useState } from "react";
+
+// This component represents the loading state of the CorporateSubscription page.
+// It mimics the page's layout using skeleton placeholders.
+const CorporateSubscriptionSkeleton = () => {
+  return (
+    <div className="p-4 max-w-3xl mx-auto">
+      <div className="space-y-3 mb-8">
+        <Skeleton className="h-8 w-3/4 rounded-lg" />
+        <Skeleton className="h-4 w-full rounded-lg" />
+        <Skeleton className="h-4 w-5/6 rounded-lg" />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-6 w-1/2 rounded-lg" />
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-1/4" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-1/4" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-1/4" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-1/4" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+          <Skeleton className="h-12 w-full mt-4" />
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
 
 export default function CorporateSubscription() {
-  const [companyName, setCompanyName] = useState('');
-  const [subscriptionType, setSubscriptionType] = useState<'daily' | 'weekly'>('daily');
-  const [autoScheduling, setAutoScheduling] = useState(true);
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [loading, setLoading] = useState(true); // Set to true to show the skeleton initially
 
-  const handleCreateSubscription = () => {
-    const quantity = subscriptionType === 'daily' ? 50 : 300;
-    const newSubscription: Subscription = {
-      id: `SUB-${Date.now()}`,
-      companyName,
-      type: subscriptionType,
-      quantity,
-      startDate: new Date(),
-      status: 'active',
-      nextDelivery: new Date(Date.now() + 86400000),
-      autoScheduling
-    };
-    setSubscriptions([...subscriptions, newSubscription]);
-    setCompanyName('');
-  };
+  // In a real app, you would fetch data and set loading to false when done.
+  // For this demonstration, we'll switch from skeleton to real UI after 3 seconds.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
 
+  if (loading) {
+    return (
+        <div className="min-h-screen bg-gray-50 pb-20">
+             <div className="bg-white shadow-sm sticky top-0 z-10">
+                <div className="max-w-3xl mx-auto px-4 py-4">
+                    <h1 className="text-xl font-bold text-gray-900">Corporate Subscription</h1>
+                </div>
+            </div>
+            <CorporateSubscriptionSkeleton />
+            <BottomNav activeTab="profile" />
+        </div>
+    );
+  }
+
+  // This is the actual UI of the page that will be shown after loading
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-      <div className="bg-white shadow-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-blue-600 p-2 rounded-xl">
-              <Building2 className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Corporate Subscription</h1>
-              <p className="text-sm text-gray-600">Manage bulk water delivery</p>
-            </div>
-          </div>
+    <div className="min-h-screen bg-gray-50 pb-20">
+       <div className="bg-white shadow-sm sticky top-0 z-10">
+        <div className="max-w-3xl mx-auto px-4 py-4">
+          <h1 className="text-xl font-bold text-gray-900">Corporate Subscription</h1>
         </div>
       </div>
+      
+      <div className="p-4 max-w-3xl mx-auto">
+        <div className="text-center mb-8">
+            <h2 className="text-3xl font-bold tracking-tight">Level Up Your Office Hydration</h2>
+            <p className="text-muted-foreground mt-2 max-w-2xl mx-auto">
+                Provide your team with premium, reliable water delivery services. Fill out the form below to get a custom quote from our sales team.
+            </p>
+        </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        {/* Create Subscription */}
-        <Card className="border-blue-100">
-          <CardHeader>
-            <CardTitle>New Subscription</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="company">Company Name</Label>
-              <Input
-                id="company"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="Enter company name"
-                className="mt-1"
-              />
-            </div>
-
-            <div>
-              <Label>Subscription Plan</Label>
-              <RadioGroup value={subscriptionType} onValueChange={(v) => setSubscriptionType(v as 'daily' | 'weekly')} className="mt-2">
-                <div className="flex items-center space-x-3 border rounded-lg p-4 hover:bg-blue-50 cursor-pointer">
-                  <RadioGroupItem value="daily" id="daily" />
-                  <Label htmlFor="daily" className="flex-1 cursor-pointer">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold">Daily Plan</p>
-                        <p className="text-sm text-gray-600">50 gallons per day</p>
-                      </div>
-                      <Package className="h-5 w-5 text-blue-600" />
+        <Card>
+            <CardHeader>
+                <h3 className="text-lg font-semibold">Inquiry Form</h3>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                        <Label htmlFor="companyName">Company Name</Label>
+                        <Input id="companyName" placeholder="e.g. Acme Inc." />
                     </div>
-                  </Label>
-                </div>
-
-                <div className="flex items-center space-x-3 border rounded-lg p-4 hover:bg-blue-50 cursor-pointer">
-                  <RadioGroupItem value="weekly" id="weekly" />
-                  <Label htmlFor="weekly" className="flex-1 cursor-pointer">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold">Weekly Plan</p>
-                        <p className="text-sm text-gray-600">300 gallons per week</p>
-                      </div>
-                      <Package className="h-5 w-5 text-blue-600" />
+                    <div className="space-y-1.5">
+                        <Label htmlFor="contactPerson">Contact Person</Label>
+                        <Input id="contactPerson" placeholder="e.g. John Doe" />
                     </div>
-                  </Label>
                 </div>
-              </RadioGroup>
-            </div>
-
-            <div className="flex items-center justify-between border rounded-lg p-4">
-              <div className="flex items-center gap-3">
-                <Calendar className="h-5 w-5 text-blue-600" />
-                <div>
-                  <p className="font-semibold">Auto-Scheduling</p>
-                  <p className="text-sm text-gray-600">Automatic delivery scheduling</p>
+                <div className="space-y-1.5">
+                    <Label htmlFor="email">Work Email</Label>
+                    <Input id="email" type="email" placeholder="e.g. john.doe@acme.com" />
                 </div>
-              </div>
-              <Switch checked={autoScheduling} onCheckedChange={setAutoScheduling} />
-            </div>
-
-            <Button
-              onClick={handleCreateSubscription}
-              disabled={!companyName}
-              className="w-full bg-blue-600 hover:bg-blue-700 h-12"
-            >
-              Create Subscription
-            </Button>
-          </CardContent>
+                 <div className="space-y-1.5">
+                    <Label htmlFor="phone">Phone Number</Label>
+                    <Input id="phone" type="tel" placeholder="e.g. 0812-3456-7890" />
+                </div>
+                <Button type="submit" className="w-full h-11 text-base mt-4">
+                    Submit Inquiry
+                </Button>
+            </CardContent>
         </Card>
-
-        {/* Active Subscriptions */}
-        {subscriptions.length > 0 && (
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Active Subscriptions</h2>
-            <div className="grid gap-4">
-              {subscriptions.map((sub) => (
-                <Card key={sub.id} className="border-green-100">
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div>
-                        <h3 className="font-bold text-lg text-gray-900">{sub.companyName}</h3>
-                        <p className="text-sm text-gray-600">ID: {sub.id}</p>
-                      </div>
-                      <div className="flex items-center gap-2 bg-green-100 px-3 py-1 rounded-full">
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
-                        <span className="text-sm font-semibold text-green-700 capitalize">{sub.status}</span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm text-gray-600">Plan Type</p>
-                        <p className="font-semibold capitalize">{sub.type}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Quantity</p>
-                        <p className="font-semibold">{sub.quantity} gallons</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Next Delivery</p>
-                        <p className="font-semibold">{sub.nextDelivery.toLocaleDateString('id-ID')}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Auto-Scheduling</p>
-                        <p className="font-semibold">{sub.autoScheduling ? 'Enabled' : 'Disabled'}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
+
+      <BottomNav activeTab="profile" />
     </div>
   );
 }

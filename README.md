@@ -126,3 +126,4 @@ Shows digital invoice with options to download PDF or share via WhatsApp.
 - Push notifications for order updates
 - Payment gateway integration
 - Multi-language support
+# algoplus-app

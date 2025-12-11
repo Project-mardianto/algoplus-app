@@ -1,204 +1,121 @@
-import { useState, useEffect } from 'react';
-import { Order, Driver, OrderStatus } from '@/types/order';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Order, OrderStatus } from '@/types/order';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { Phone, Star, MapPin, Clock, Navigation } from 'lucide-react';
+import { Phone, Star, Clock, CheckCircle, Package, Truck, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import { supabase } from '@/lib/supabase';
+import { useToast } from '@/components/ui/use-toast';
+import { Skeleton } from './ui/skeleton';
 
-interface OrderTrackingProps {
-  order: Order;
-  onOrderComplete: () => void;
-}
+const OrderTrackingSkeleton = () => (
+    <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+        <Card className="overflow-hidden border-gray-200"><Skeleton className="h-60 w-full" /><div className="p-6 bg-white"><div className="flex items-center justify-between"><Skeleton className="h-12 w-3/4" /><Skeleton className="h-16 w-16 rounded-full" /></div><Separator className="my-4" /><Skeleton className="h-6 w-full" /></div></Card>
+        <Card className="border-gray-200"><CardContent className="p-6"><div className="flex items-center gap-4"><Skeleton className="h-16 w-16 rounded-full" /><div className="flex-1 space-y-2"><Skeleton className="h-6 w-3/4" /><Skeleton className="h-4 w-1/2" /></div><Skeleton className="h-12 w-12 rounded-full" /></div></CardContent></Card>
+        <Card className="border-gray-200"><CardContent className="p-6"><Skeleton className="h-8 w-1/3 mb-5" /><div className="space-y-8">{[...Array(4)].map((_, i) => (<div key={i} className="flex gap-4 items-start"><Skeleton className="w-10 h-10 rounded-full" /><div className="pt-1.5 flex-1 space-y-2"><Skeleton className="h-6 w-3/4" /><Skeleton className="h-4 w-1/2" /></div></div>))}</div></CardContent></Card>
+    </div>
+);
 
-const mockDriver: Driver = {
-  id: 'DRV-001',
-  name: 'Ahmad Rizki',
-  photo: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Ahmad',
-  rating: 4.8,
-  phone: '+62 812-3456-7890',
-  vehicleNumber: 'B 1234 XYZ',
-  location: {
-    lat: -6.2088,
-    lng: 106.8456
-  }
-};
+interface StatusStep { status: OrderStatus; label: string; icon: React.ReactNode; }
+const getInitials = (name: string) => (name || '').split(' ').map((n) => n[0]).join('').toUpperCase();
+const STATUS_SEQUENCE: OrderStatus[] = ['confirmed', 'preparing', 'out_for_delivery', 'arrived'];
 
-const statusSteps: { status: OrderStatus; label: string; time: string }[] = [
-  { status: 'confirmed', label: 'Order Confirmed', time: '2 min ago' },
-  { status: 'driver-assigned', label: 'Driver Assigned', time: '1 min ago' },
-  { status: 'en-route', label: 'Driver En Route', time: 'Just now' },
-  { status: 'nearby', label: 'Driver Nearby', time: '' },
-  { status: 'arrived', label: 'Driver Arrived', time: '' }
-];
+export default function OrderTracking() {
+  const { orderId } = useParams<{ orderId: string }>();
+  const navigate = useNavigate();
+  const [order, setOrder] = useState<Order | null>(null);
+  const [driverProfile, setDriverProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [eta, setEta] = useState(15); // Default ETA
+  const { toast } = useToast();
 
-export default function OrderTracking({ order, onOrderComplete }: OrderTrackingProps) {
-  const [currentStatus, setCurrentStatus] = useState<OrderStatus>('driver-assigned');
-  const [estimatedTime, setEstimatedTime] = useState(15);
+  const statusSteps = useMemo((): StatusStep[] => [
+    { status: 'confirmed', label: 'Order Confirmed', icon: <CheckCircle className="w-5 h-5" /> },
+    { status: 'preparing', label: 'Preparing Your Order', icon: <Package className="w-5 h-5" /> },
+    { status: 'out_for_delivery', label: 'Out for Delivery', icon: <Truck className="w-5 h-5" /> },
+    { status: 'arrived', label: 'Driver Has Arrived', icon: <Star className="w-5 h-5" /> },
+  ], []);
+
+  const fetchOrderAndDriver = useCallback(async () => {
+    if (!orderId) { setError("Order ID is missing."); setLoading(false); return; }
+    try {
+      // Aliased 'products' to 'product' to match the TypeScript type 'CartItem'
+      const { data, error } = await supabase.from('orders').select('*, order_items(*, product:products(*)), profiles(*)').eq('id', orderId).single();
+      if (error) throw error;
+      if (!data) throw new Error("Order not found.");
+      setOrder(data as Order);
+      if (data.driver_id) {
+        const { data: driverData, error: driverError } = await supabase.from('profiles').select('full_name, avatar_url, rating, vehicle_number').eq('id', data.driver_id).single();
+        if (driverError) throw driverError;
+        setDriverProfile(driverData);
+      }
+    } catch (err: any) {
+      setError(err.message);
+      toast({ title: "Error Fetching Order", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }, [orderId, toast]);
 
   useEffect(() => {
-    // Simulate status progression
-    const timer1 = setTimeout(() => setCurrentStatus('en-route'), 3000);
-    const timer2 = setTimeout(() => {
-      setCurrentStatus('nearby');
-      setEstimatedTime(5);
-    }, 8000);
-    const timer3 = setTimeout(() => setCurrentStatus('arrived'), 13000);
+    fetchOrderAndDriver();
+    const channel = supabase.channel(`order-tracking:${orderId}`)
+      .on<Order>('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` }, (payload) => {
+        const newOrder = payload.new as Order;
+        setOrder(currentOrder => ({ ...currentOrder, ...newOrder, order_items: currentOrder?.order_items || [], profiles: currentOrder?.profiles || null }));
+        if (newOrder.status === 'arrived') {
+            toast({ title: "Driver has arrived!", description: "Your order is now complete.", duration: 5000 });
+            setTimeout(() => navigate(`/complete/${orderId}`), 3000);
+        }
+      }).subscribe();
+      
+    return () => { supabase.removeChannel(channel); };
+  }, [orderId, fetchOrderAndDriver, navigate, toast]);
 
-    // Countdown timer
-    const countdown = setInterval(() => {
-      setEstimatedTime(prev => Math.max(0, prev - 1));
-    }, 60000);
+  if (loading) return <OrderTrackingSkeleton />;
+  if (error) return <div className="min-h-screen flex items-center justify-center"><div className="text-center text-red-500">Error: {error}</div></div>;
+  if (!order) return <div className="min-h-screen flex items-center justify-center"><div className="text-center">Order not found.</div></div>;
 
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
-      clearInterval(countdown);
-    };
-  }, []);
-
-  const getCurrentStepIndex = () => {
-    return statusSteps.findIndex(step => step.status === currentStatus);
-  };
+  const currentStatusIndex = STATUS_SEQUENCE.indexOf(order.status);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
-      {/* Header */}
-      <div className="bg-white shadow-sm">
-        <div className="max-w-3xl mx-auto px-4 py-4">
-          <h1 className="text-xl font-bold text-gray-900">Track Your Order</h1>
-          <p className="text-sm text-gray-600">Order #{order.id}</p>
-        </div>
-      </div>
-
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
-        {/* Map Placeholder */}
-        <Card className="overflow-hidden border-blue-100">
-          <div className="relative h-64 bg-gradient-to-br from-blue-100 via-blue-50 to-green-50">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <Navigation className="h-16 w-16 text-blue-600 mx-auto mb-2 animate-pulse" />
-                <p className="text-sm text-gray-600">Live tracking map</p>
-              </div>
-            </div>
-            {/* Mock location markers */}
-            <div className="absolute top-1/4 left-1/3 bg-blue-600 rounded-full p-2 shadow-lg animate-bounce">
-              <MapPin className="h-5 w-5 text-white" />
-            </div>
-            <div className="absolute bottom-1/4 right-1/3 bg-green-600 rounded-full p-2 shadow-lg">
-              <MapPin className="h-5 w-5 text-white" />
-            </div>
-          </div>
-        </Card>
-
-        {/* ETA Card */}
-        <Card className="border-blue-100 bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+        <Card className="overflow-hidden border-gray-200"><div className="relative h-60 bg-gray-100 flex items-center justify-center"><img src="https://www.medcoenergi.com/images/uploads/subsidiaries/map-dummy.jpg" alt="Delivery Map" className="w-full h-full object-cover" /></div><div className="p-6 bg-white"><div className="flex items-center justify-between"><div><p className="text-gray-500 text-sm">Estimated Arrival</p><p className="text-3xl font-bold text-gray-800">{eta > 0 ? `${eta} min` : 'Arriving now'}</p></div><div className="bg-orange-500 p-4 rounded-full"><Clock className="h-8 w-8 text-white" /></div></div><Separator className="my-4" /><div><p className="text-gray-500 text-sm mb-1">Delivery To</p><p className="font-semibold text-gray-800 whitespace-pre-line">{order.shipping_address}</p></div></div></Card>
+        {driverProfile && <Card className="border-gray-200"><CardContent className="p-6"><div className="flex items-center gap-4"><Avatar className="h-16 w-16 border-2 border-orange-100"><AvatarImage src={driverProfile.avatar_url} /><AvatarFallback>{getInitials(driverProfile.full_name)}</AvatarFallback></Avatar><div className="flex-1"><h3 className="font-bold text-lg text-gray-900">{driverProfile.full_name}</h3><div className="flex items-center gap-3 text-sm text-gray-500 mt-1"><div className="flex items-center gap-1"><Star className="w-4 h-4 text-yellow-400 fill-yellow-400" /><span className="font-semibold text-gray-700">{driverProfile.rating?.toFixed(1) || 'N/A'}</span></div><Separator orientation="vertical" className="h-4" /><span>{driverProfile.vehicle_number || 'No vehicle'}</span></div></div><Button size="icon" className="bg-green-500 hover:bg-green-600 rounded-full h-12 w-12"><Phone className="h-5 w-5" /></Button></div></CardContent></Card>}
+        <Card className="border-gray-200">
           <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-100 text-sm mb-1">Estimated Arrival</p>
-                <p className="text-3xl font-bold">{estimatedTime} mins</p>
-              </div>
-              <div className="bg-white/20 backdrop-blur-sm p-4 rounded-full">
-                <Clock className="h-8 w-8" />
-              </div>
+            <h3 className="font-bold text-lg text-gray-900 mb-5">Order Status</h3>
+            <div className="space-y-2">
+                {statusSteps.map((step, index) => {
+                    const isCompleted = index < currentStatusIndex;
+                    const isCurrent = index === currentStatusIndex;
+                    return (
+                        <div key={step.status} className={`flex gap-4 items-start transition-opacity duration-500 ${isCompleted || isCurrent ? 'opacity-100' : 'opacity-40'}`}>
+                            <div className="flex flex-col items-center h-full">
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${isCurrent ? 'bg-orange-500 text-white ring-4 ring-orange-100' : isCompleted ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-400'}`}>
+                                    {step.icon}
+                                </div>
+                                {index < statusSteps.length - 1 && (
+                                    <div className={`w-0.5 flex-1 mt-2 transition-colors duration-500 ${isCompleted ? 'bg-green-500' : 'bg-gray-200'}`} style={{minHeight: '40px'}}/>
+                                )}
+                            </div>
+                            <div className="pt-1.5">
+                                <p className={`font-semibold ${isCurrent ? 'text-orange-600' : isCompleted ? 'text-green-600' : 'text-gray-500'}`}>{step.label}</p>
+                                {isCurrent && !isCompleted && <p className="text-sm text-gray-500 animate-pulse">Updating status...</p>}
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
           </CardContent>
         </Card>
-
-        {/* Driver Info */}
-        <Card className="border-blue-100">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4 mb-4">
-              <Avatar className="h-16 w-16 border-2 border-blue-200">
-                <AvatarImage src={mockDriver.photo} alt={mockDriver.name} />
-                <AvatarFallback>{mockDriver.name.charAt(0)}</AvatarFallback>
-              </Avatar>
-              <div className="flex-1">
-                <h3 className="font-bold text-lg text-gray-900">{mockDriver.name}</h3>
-                <div className="flex items-center gap-2 mt-1">
-                  <div className="flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded-full">
-                    <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                    <span className="text-sm font-semibold text-yellow-700">{mockDriver.rating}</span>
-                  </div>
-                  <span className="text-sm text-gray-600">{mockDriver.vehicleNumber}</span>
-                </div>
-              </div>
-              <Button
-                size="icon"
-                className="bg-green-600 hover:bg-green-700 rounded-full h-12 w-12"
-              >
-                <Phone className="h-5 w-5" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Status Timeline */}
-        <Card className="border-blue-100">
-          <CardContent className="p-6">
-            <h3 className="font-bold text-lg text-gray-900 mb-4">Delivery Status</h3>
-            <div className="space-y-4">
-              {statusSteps.map((step, index) => {
-                const isCompleted = index <= getCurrentStepIndex();
-                const isCurrent = index === getCurrentStepIndex();
-                
-                return (
-                  <div key={step.status} className="flex gap-4">
-                    <div className="flex flex-col items-center">
-                      <div
-                        className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-                          isCompleted
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-200 text-gray-400'
-                        } ${isCurrent ? 'ring-4 ring-blue-200 scale-110' : ''}`}
-                      >
-                        {isCompleted ? (
-                          <div className="w-3 h-3 bg-white rounded-full" />
-                        ) : (
-                          <div className="w-3 h-3 bg-gray-400 rounded-full" />
-                        )}
-                      </div>
-                      {index < statusSteps.length - 1 && (
-                        <div
-                          className={`w-0.5 h-12 ${
-                            isCompleted ? 'bg-blue-600' : 'bg-gray-200'
-                          }`}
-                        />
-                      )}
-                    </div>
-                    <div className="flex-1 pb-8">
-                      <div className="flex items-center gap-2">
-                        <p
-                          className={`font-semibold ${
-                            isCompleted ? 'text-gray-900' : 'text-gray-400'
-                          }`}
-                        >
-                          {step.label}
-                        </p>
-                        {isCurrent && (
-                          <Badge className="bg-blue-600 text-white">Current</Badge>
-                        )}
-                      </div>
-                      {step.time && (
-                        <p className="text-sm text-gray-600 mt-1">{step.time}</p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Complete Order Button (shown when arrived) */}
-        {currentStatus === 'arrived' && (
-          <Button
-            onClick={onOrderComplete}
-            className="w-full bg-green-600 hover:bg-green-700 text-white h-14 text-lg font-semibold rounded-xl shadow-lg"
-          >
-            Complete Order
+        {order.status === 'arrived' && (
+          <Button onClick={() => navigate(`/complete/${orderId}`)} className="w-full bg-green-600 hover:bg-green-700 h-14 text-lg font-semibold rounded-xl shadow-lg">
+            Finalize Order
           </Button>
         )}
       </div>
